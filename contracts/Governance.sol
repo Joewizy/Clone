@@ -212,24 +212,30 @@ contract Governance is Ownable, ReentrancyGuard {
      * @dev Gets details of a proposal
      * @param proposalId ID of the proposal
      */
-    function getProposalDetails(uint256 proposalId) external view returns (ProposalDetails memory) {
+    function getProposalDetails(uint256 proposalId) external view returns (
+        address _proposer,
+        string memory _description,
+        uint256 _createdAt,
+        uint256 _votesFor,
+        uint256 _votesAgainst,
+        bool _executed,
+        bool _canceled,
+        ProposalState _state
+    ) {
         require(proposalId < proposalCount, "Invalid proposal ID");
         
         Proposal storage proposal = proposals[proposalId];
         
-        // Create a ProposalDetails struct to avoid stack too deep errors
-        ProposalDetails memory details = ProposalDetails({
-            proposer: proposal.proposer,
-            description: proposal.description,
-            createdAt: proposal.createdAt,
-            votesFor: proposal.votesFor,
-            votesAgainst: proposal.votesAgainst,
-            executed: proposal.executed,
-            canceled: proposal.canceled,
-            state: getProposalState(proposalId)
-        });
-        
-        return details;
+        return (
+            proposal.proposer,
+            proposal.description,
+            proposal.createdAt,
+            proposal.votesFor,
+            proposal.votesAgainst,
+            proposal.executed,
+            proposal.canceled,
+            getProposalState(proposalId)
+        );
     }
     
     /**
