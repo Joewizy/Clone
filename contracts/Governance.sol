@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./sETH.sol";
 
 /**
@@ -17,6 +17,8 @@ contract Governance is Ownable, ReentrancyGuard {
     uint256 public votingPeriod = 3 days;
     uint256 public executionDelay = 2 days;
     uint256 public quorum = 100 ether; // Minimum votes required for a proposal to pass
+    uint256 public constant MAX_PROPOSAL = 30; // Limit to prevent unbounded growth
+    uint256 public gracePeriod = 1 days; // Grace period for execution after delay
     
     // Proposal struct
     struct Proposal {
@@ -63,14 +65,18 @@ contract Governance is Ownable, ReentrancyGuard {
     // Mapping from proposal ID to Proposal
     mapping(uint256 => Proposal) public proposals;
     
+    // Whitelist for allowed execution targets
+    mapping(address => bool) public allowedTargets;
+
     // Events
     event ProposalCreated(uint256 indexed proposalId, address indexed proposer, string description);
     event VoteCast(address indexed voter, uint256 indexed proposalId, bool support, uint256 weight);
     event ProposalExecuted(uint256 indexed proposalId);
     event ProposalCanceled(uint256 indexed proposalId);
+    event TargetWhitelisted(address indexed target, bool allowed);
     
-    // Constructor - Perbaikan: menggunakan address payable
-    constructor(address payable _sETHToken) Ownable(msg.sender) {
+    //Removed unnecessary payable
+    constructor(address _sETHToken) Ownable(msg.sender) {
         sETHToken = StakedETH(_sETHToken);
     }
     
@@ -82,6 +88,8 @@ contract Governance is Ownable, ReentrancyGuard {
      */
     function createProposal(string memory description, address target, bytes memory callData) external returns (uint256) {
         require(sETHToken.balanceOf(msg.sender) >= 1 ether, "Must have at least 1 sETH to create proposal");
+        require(proposalCount < MAX_PROPOSAL, "Cannot create another proposal max limit has been reached");
+        require(allowedTargets[target], "Target address is not whitelisted");
         
         uint256 proposalId = proposalCount++;
         
@@ -135,6 +143,9 @@ contract Governance is Ownable, ReentrancyGuard {
         require(getProposalState(proposalId) == ProposalState.Succeeded, "Proposal not in succeeded state");
         
         Proposal storage proposal = proposals[proposalId];
+        
+        // Check expiry state of the prosposal and added a gracePeriod delay.
+        require(block.timestamp <= proposal.createdAt + votingPeriod + executionDelay + gracePeriod, "Proposal has expired");
         
         // Mark as executed
         proposal.executed = true;
@@ -265,10 +276,33 @@ contract Governance is Ownable, ReentrancyGuard {
     function updateGovernanceParams(
         uint256 _votingPeriod,
         uint256 _executionDelay,
-        uint256 _quorum
+        uint256 _quorum,
+        uint256 _gracePeriod
     ) external onlyOwner {
         votingPeriod = _votingPeriod;
         executionDelay = _executionDelay;
         quorum = _quorum;
+        gracePeriod = _gracePeriod;
+    }
+    
+    /**
+     * @dev Whitelist or blacklist a target address (only owner)
+     * @param target Address to whitelist/blacklist
+     * @param allowed True to whitelist, false to blacklist
+     */
+    function setTargetWhitelist(address target, bool allowed) external onlyOwner {
+        allowedTargets[target] = allowed;
+        emit TargetWhitelisted(target, allowed);
+    }
+    
+    /**
+     * @dev Clean up expired proposals to save gas
+     * @param proposalId ID of the proposal to clean up
+     */
+    function deleteExpiredProposals(uint256 proposalId) external {
+        require(getProposalState(proposalId) == ProposalState.Expired, "Proposal not expired");
+        require(!proposals[proposalId].executed && !proposals[proposalId].canceled, "Cannot delete executed or canceled");
+        
+        delete proposals[proposalId];
     }
 }

@@ -3,14 +3,16 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import "./dETH.sol";
 
 /**
  * @title StakedETH Token
  * @dev ERC20 token that users receive when staking dETH
  */
-contract StakedETH is ERC20, Ownable, ReentrancyGuard {
+contract StakedETH is ERC20, ERC20Permit, ERC20Votes, Ownable, ReentrancyGuard {
     // State variables
     DepositETH public dETHToken;
     uint256 public totalStaked;
@@ -38,7 +40,7 @@ contract StakedETH is ERC20, Ownable, ReentrancyGuard {
     event LeaderboardUpdated(uint256 timestamp);
     
     // Constructor - Perbaikan: menggunakan address payable
-    constructor(address payable _dETHToken) ERC20("Staked ETH Token", "sETH") Ownable(msg.sender) {
+    constructor(address payable _dETHToken) ERC20("Staked ETH Token", "sETH") ERC20Permit("Staked ETH Token") Ownable(msg.sender) {
         dETHToken = DepositETH(_dETHToken);
     }
     
@@ -296,5 +298,29 @@ contract StakedETH is ERC20, Ownable, ReentrancyGuard {
         }
         
         return (_stakers, _amounts, _timestamps, _ranks);
+    }
+
+    /**
+     * @dev Get current voting power of an account
+     */
+    function getCurrentVotes(address account) public view returns (uint256) {
+        return getVotes(account);
+    }
+
+    // Required overrides for multiple inheritance
+    function _update(address from, address to, uint256 value)
+        internal
+        override(ERC20, ERC20Votes)
+    {
+        super._update(from, to, value);
+    }
+
+    function nonces(address owner)
+        public
+        view
+        override(ERC20Permit, Nonces)
+        returns (uint256)
+    {
+        return super.nonces(owner);
     }
 }
