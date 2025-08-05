@@ -43,6 +43,10 @@ contract StakedETH is ERC20, ERC20Permit, ERC20Votes, Ownable, ReentrancyGuard {
     constructor(address payable _dETHToken) ERC20("Staked ETH Token", "sETH") ERC20Permit("Staked ETH Token") Ownable(msg.sender) {
         dETHToken = DepositETH(_dETHToken);
     }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
     
     /**
      * @dev Allows users to stake dETH and receive sETH tokens

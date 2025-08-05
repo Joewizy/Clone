@@ -1,15 +1,18 @@
 const { ethers } = require("ethers");
 
-
-const CONTRACT_ABI = require("../lib/abis/governance.json"); 
-const GOVERNANCE_CONTRACT_ADDRESS = "";
-const PROVIDER_URL = ""; 
-const PRIVATE_KEY = process.env.PRIVATE_KEY; // Owner wallet key
+const CONTRACT_ABI = require("../../contracts/out/Governance.sol/Governance.json").abi; 
+const GOVERNANCE_CONTRACT_ADDRESS = "0xB93479dD55f5D4B358CA7BFB5Bf6B4dCBfB5a249";
+const PROVIDER_URL = process.env.RPC_URL; 
+const PRIVATE_KEY = process.env.PRIVATE_KEY; // Deployers
 
 // -------------------------------
 // INITIALIZE PROVIDER & SIGNER
 // -------------------------------
-const provider = new ethers.providers.JsonRpcProvider(PROVIDER_URL);
+
+if (!PROVIDER_URL || !PRIVATE_KEY) {
+  throw new Error("ENV not configured properly")
+}
+const provider = new ethers.JsonRpcProvider(PROVIDER_URL);
 const signer = new ethers.Wallet(PRIVATE_KEY, provider);
 
 // -------------------------------
@@ -40,12 +43,30 @@ const createProposal = async (req, res) => {
     }
 
     const tx = await governanceContract.createProposal(description, targetAddress, callData);
-    await tx.wait();
+    const receipt = await tx.wait();
+
+    // Listen to event emitted on the blockchain so we can get the proposalID
+    let proposalId = null;
+    
+    if (receipt.logs && receipt.logs.length > 0) {
+      for (const log of receipt.logs) {
+        try {
+          const parsedLog = governanceContract.interface.parseLog(log);
+          if (parsedLog && parsedLog.name === "ProposalCreated") {
+            proposalId = parsedLog.args.proposalId;
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
     
     res.status(201).json({
       success: true,
       message: "Proposal created successfully",
-      transactionHash: tx.hash
+      transactionHash: tx.hash,
+      proposalId: proposalId ? proposalId.toString() : "Could not determine proposal ID from transaction"
     });
   } catch (error) {
     res.status(500).json({
@@ -61,17 +82,19 @@ const createProposal = async (req, res) => {
  */
 const castVote = async (req, res) => {
   try {
-    const { proposalId } = req.params;
-    const { support } = req.body;
+    const { proposalId, support } = req.body;
     
-    if (support === undefined) {
+    if (proposalId === undefined || proposalId === null || support === undefined) {
       return res.status(400).json({
         success: false,
-        message: "Missing required field: support (boolean)"
+        message: "Missing required fields: proposalId, support (boolean)"
       });
     }
 
-    const tx = await governanceContract.castVote(proposalId, support);
+    const proposalIdNum = BigInt(proposalId);
+    const supportBool = Boolean(support);
+    
+    const tx = await governanceContract.castVote(proposalIdNum, supportBool);
     await tx.wait();
     
     res.status(200).json({
@@ -93,9 +116,16 @@ const castVote = async (req, res) => {
  */
 const executeProposal = async (req, res) => {
   try {
-    const { proposalId } = req.params;
+    const { proposalId } = req.body;
+    
+    if (!proposalId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required field: proposalId"
+      });
+    }
 
-    const tx = await governanceContract.executeProposal(proposalId);
+    const tx = await governanceContract.executeProposal(BigInt(proposalId));
     await tx.wait();
     
     res.status(200).json({
@@ -117,9 +147,16 @@ const executeProposal = async (req, res) => {
  */
 const cancelProposal = async (req, res) => {
   try {
-    const { proposalId } = req.params;
+    const { proposalId } = req.body;
+    
+    if (!proposalId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required field: proposalId"
+      });
+    }
 
-    const tx = await governanceContract.cancelProposal(proposalId);
+    const tx = await governanceContract.cancelProposal(BigInt(proposalId));
     await tx.wait();
     
     res.status(200).json({
@@ -141,21 +178,40 @@ const cancelProposal = async (req, res) => {
  */
 const getProposalDetails = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { proposalId } = req.body;
     
-    const details = await governanceContract.getProposalDetails(id);
+    if (proposalId === undefined || proposalId === null) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required field: proposalId"
+      });
+    }
+    
+    const details = await governanceContract.getProposalDetails(BigInt(proposalId));
+    
+    // Helper function to safely convert values to JSON-serializable format
+    const safeValue = (value) => {
+      if (typeof value === 'bigint') {
+        return value.toString();
+      }
+      return value;
+    };
+    
+    const votesForFormatted = ethers.formatEther(details[3]);
+    const votesAgainstFormatted = ethers.formatEther(details[4]);
     
     res.status(200).json({
       success: true,
       data: {
-        proposer: details[0],
-        description: details[1],
-        createdAt: Number(details[2]),
-        votesFor: ethers.utils.formatEther(details[3]),
-        votesAgainst: ethers.utils.formatEther(details[4]),
-        executed: details[5],
-        canceled: details[6],
-        state: details[7],
+        proposalId: BigInt(proposalId).toString(),
+        proposer: safeValue(details[0]),
+        description: safeValue(details[1]),
+        createdAt: safeValue(details[2]),
+        votesFor: votesForFormatted,
+        votesAgainst: votesAgainstFormatted,
+        executed: safeValue(details[5]),
+        canceled: safeValue(details[6]),
+        state: safeValue(details[7]),
       }
     });
   } catch (error) {
@@ -172,9 +228,16 @@ const getProposalDetails = async (req, res) => {
  */
 const getVoteByUser = async (req, res) => {
   try {
-    const { id, voter } = req.params;
+    const { proposalId, voter } = req.body;
     
-    const vote = await governanceContract.getVoteByUser(id, voter);
+    if (!proposalId || !voter) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: proposalId, voter"
+      });
+    }
+    
+    const vote = await governanceContract.getVoteByUser(BigInt(proposalId), voter);
     
     const voteStatus = {
       0: "None",
@@ -185,9 +248,9 @@ const getVoteByUser = async (req, res) => {
     res.status(200).json({
       success: true,
       data: {
-        proposalId: id,
+        proposalId: BigInt(proposalId).toString(),
         voter: voter,
-        vote: vote,
+        vote: vote.toString(),
         voteStatus: voteStatus[vote]
       }
     });
@@ -195,6 +258,39 @@ const getVoteByUser = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch vote",
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get proposal votes
+ */
+const getProposalVotes = async (req, res) => {
+  try {
+    const { proposalId } = req.body;
+    
+    if (!proposalId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required field: proposalId"
+      });
+    }
+    
+    const [votesFor, votesAgainst] = await governanceContract.getProposalVotes(BigInt(proposalId));
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        proposalId: BigInt(proposalId).toString(),
+        votesFor: ethers.formatEther(votesFor),
+        votesAgainst: ethers.formatEther(votesAgainst)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch proposal votes",
       error: error.message
     });
   }
@@ -236,9 +332,16 @@ const setTargetWhitelist = async (req, res) => {
  */
 const deleteExpiredProposal = async (req, res) => {
   try {
-    const { proposalId } = req.params;
+    const { proposalId } = req.body;
+    
+    if (!proposalId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required field: proposalId"
+      });
+    }
 
-    const tx = await governanceContract.deleteExpiredProposals(proposalId);
+    const tx = await governanceContract.deleteExpiredProposals(BigInt(proposalId));
     await tx.wait();
     
     res.status(200).json({
@@ -263,6 +366,7 @@ module.exports = {
   cancelProposal,
   getProposalDetails,
   getVoteByUser,
+  getProposalVotes,
   setTargetWhitelist,
   deleteExpiredProposal,
 };

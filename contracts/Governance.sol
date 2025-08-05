@@ -75,7 +75,7 @@ contract Governance is Ownable, ReentrancyGuard {
     event ProposalCanceled(uint256 indexed proposalId);
     event TargetWhitelisted(address indexed target, bool allowed);
     
-    //Removed unnecessary payable
+    // Removed unnecessary payable
     constructor(address _sETHToken) Ownable(msg.sender) {
         sETHToken = StakedETH(_sETHToken);
     }

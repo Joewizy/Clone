@@ -1,0 +1,78 @@
+### Blockchain API Endpoints (All endpoints working - Clean & Minimal)
+
+### Step 1: Whitelist Target Address (Admin Only)
+POST http://localhost:4000/api/v1/admin/target-whitelist
+Content-Type: application/json
+
+{
+  "targetAddress": "0xee30E5b391aBf6Bf36a646FddfEaf256512d6B9D",
+  "allowed": true
+}
+
+### Step 2: Create a Proposal (Requires 1 sETH balance)
+POST http://localhost:4000/api/v1/proposal/create
+Content-Type: application/json
+
+{
+  "description": "NEW PROPOSAL",
+  "targetAddress": "0xee30E5b391aBf6Bf36a646FddfEaf256512d6B9D",
+  "callData": "0x6a6f6577697a79"
+}
+
+### Step 3: Cast a Vote (Requires sETH balance for voting power)
+POST http://localhost:4000/api/v1/proposal/vote
+Content-Type: application/json
+
+{
+  "proposalId": 7,
+  "support": true
+}
+
+### Get Proposal Details
+POST http://localhost:4000/api/v1/proposal/details
+Content-Type: application/json
+
+{
+  "proposalId": 7
+}
+
+### Get Proposal Votes
+POST http://localhost:4000/api/v1/proposal/votes
+Content-Type: application/json
+
+{
+  "proposalId": 7
+}
+
+### Get Vote by User
+POST http://localhost:4000/api/v1/proposal/vote-by-user
+Content-Type: application/json
+
+{
+  "proposalId": 1,
+  "voter": "0xee30E5b391aBf6Bf36a646FddfEaf256512d6B9D"
+}
+
+### Execute Proposal (Only after voting period + delay)
+POST http://localhost:4000/api/v1/proposal/execute
+Content-Type: application/json
+
+{
+  "proposalId": 7
+}
+
+### Cancel Proposal
+POST http://localhost:4000/api/v1/proposal/cancel
+Content-Type: application/json
+
+{
+  "proposalId": 7
+}
+
+### Delete Expired Proposal
+POST http://localhost:4000/api/v1/proposal/delete
+Content-Type: application/json
+
+{
+  "proposalId": 7
+} 

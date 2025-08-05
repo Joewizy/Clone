@@ -6,25 +6,22 @@ const {
     cancelProposal, 
     getProposalDetails, 
     getVoteByUser, 
+    getProposalVotes,
     setTargetWhitelist, 
     deleteExpiredProposal 
 } = require('../controllers/blockchainController');
-const { isAuthenticatedUser, authorizeRoles } = require('../middlewares/user_actions/auth');
 
 const router = express.Router();
 
-// Public routes
-router.route('/proposal/:id').get(getProposalDetails);
-router.route('/proposal/:id/vote/:voter').get(getVoteByUser);
-
-// Routes (require authentication) 
-router.route('/proposal/create').post(isAuthenticatedUser, createProposal);
-router.route('/proposal/:id/vote').post(isAuthenticatedUser, castVote);
-router.route('/proposal/:id/execute').post(isAuthenticatedUser, executeProposal);
-router.route('/proposal/:id/cancel').post(isAuthenticatedUser, cancelProposal);
-router.route('/proposal/:id/delete').delete(isAuthenticatedUser, deleteExpiredProposal);
-
-// Admin only routes
-router.route('/admin/target-whitelist').post(isAuthenticatedUser, authorizeRoles("admin"), setTargetWhitelist);
+// All routes are public 
+router.route('/proposal/details').post(getProposalDetails);
+router.route('/proposal/votes').post(getProposalVotes);
+router.route('/proposal/vote-by-user').post(getVoteByUser);
+router.route('/proposal/create').post(createProposal);
+router.route('/proposal/vote').post(castVote);
+router.route('/proposal/execute').post(executeProposal);
+router.route('/proposal/cancel').post(cancelProposal);
+router.route('/proposal/delete').post(deleteExpiredProposal);
+router.route('/admin/target-whitelist').post(setTargetWhitelist);
 
 module.exports = router; 
